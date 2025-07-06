@@ -36,7 +36,7 @@ This is a **lightweight**, **user-controlled**, **emulator-agnostic** tool that'
 * [ ] Group related commands into "blocks"
 * [ ] Display error/warning summary in terminal overlay
 
-### Contextual Summarization (AI-)
+### Contextual Summarization (AI)
 
 * [ ] Format cleaned context into structured prompt
 * [ ] Send to model (OpenAI API, Ollama, etc.)

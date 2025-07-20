@@ -17,7 +17,7 @@ This is a **lightweight**, **user-controlled**, **emulator-agnostic** tool that'
 Recli is built in Rust, so you can install it to path using `cargo`. The following drop-in script will clone the repo, build the binary, install it to `~/.cargo/bin`, and then run the help command to verify the installation:
 
 ```bash
-git clone https://github.com/<your-username>/recli.git
+git clone https://github.com/exekis/recli.git
 cd recli
 cargo install --path .
 recli --help

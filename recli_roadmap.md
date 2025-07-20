@@ -12,8 +12,8 @@
 ### **Phase 1: MVP**
 
 * [x] Run basic shell passthrough via PTY
-* [ ] Intercept `Ctrl+X` via `crossterm`
-* [ ] Print "Hotkey detected!" as test
+* [x] Intercept `Ctrl+X` via `crossterm`
+* [x] Print "Hotkey detected!" as test
 
 ### **Phase 2: Terminal Buffer & Command Log**
 

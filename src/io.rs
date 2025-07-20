@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::io::Write;
 
 /// handles the conversion of terminal events to PTY input
@@ -7,9 +7,19 @@ pub struct InputHandler;
 
 impl InputHandler {
     /// convert a crossterm KeyEvent to bytes that can be sent to PTY
+    /// returns None if this is a special hotkey that shouldn't be forwarded
     pub fn key_to_bytes(key_event: KeyEvent) -> Option<Vec<u8>> {
         if key_event.kind != KeyEventKind::Press {
             return None;
+        }
+
+        // check for ctrl+x hotkey before processing other keys
+        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+            if let KeyCode::Char('x') = key_event.code {
+                // detected ctrl+x so handle it and don't forward to pty
+                println!("\r\n[RECLI] Hotkey detected! (Ctrl+X intercepted)");
+                return None;
+            }
         }
 
         match key_event.code {

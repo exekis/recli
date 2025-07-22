@@ -7,19 +7,22 @@
 * [x] Install Rust and `cargo`
 * [x] Finish Rustlings (in progress)
 * [x] Create new binary crate: `recli`
-* [x] Add `clap` or `argh` for command-line args
+* [x] Add `clap` with subcommands for better control
 
 ### **Phase 1: MVP**
 
 * [x] Run basic shell passthrough via PTY
 * [x] Intercept `Ctrl+X` via `crossterm`
 * [x] Print "Hotkey detected!" as test
+* [x] Add CLI subcommands (`start`, `stop`, `status`, `recent`, `clear`)
 
 ### **Phase 2: Terminal Buffer & Command Log**
 
-* [ ] Start storing all typed commands and outputs
-* [ ] Include cwd and exit code per command
-* [ ] Save history to structured log
+* [x] Create CommandEntry and CommandLog data structures
+* [x] Implement command logging methods (`start_command`, `append_output`, `finish_command`)
+* [ ] Integrate command detection with PTY output parsing
+* [ ] Include cwd and exit code per command (structures ready)
+* [ ] Save history to structured log (methods ready)
 
 ### **Phase 3: Context Summarizer**
 

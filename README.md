@@ -24,59 +24,62 @@ recli --help
 ```
 
 ## **Key Features**
+
+> **Note:** For the latest development progress and implementation status, see [`recli_roadmap.md`](recli_roadmap.md).
+
 ### Infrastructure
 
-* [x] CLI interface via `clap` or `argh`
-* [ ] Start/stop wrapper around a real shell (bash/zsh) using PTY
-* [ ] Stream stdin/stdout to user
+* CLI interface via `clap` with subcommands (`start`, `stop`, `status`, `recent`, `clear`)
+* Start/stop wrapper around a real shell (bash/zsh) using PTY
+* Stream stdin/stdout to user
 
 ### Hotkey Activation
 
-* [ ] Raw mode input handling (`Ctrl+X` etc.)
-* [ ] On hotkey, pause stream and snapshot recent terminal buffer
-* [ ] Resume stream after user confirmation
+* Raw mode input handling (`Ctrl+X` etc.)
+* On hotkey, pause stream and snapshot recent terminal buffer
+* Resume stream after user confirmation
 
 ### Contextual Summarization (Non-AI)
 
-* [ ] Parse command log to detect:
-  * [ ] Errors (`error:`, `fatal:`, `panic`)
-  * [ ] Warnings (`warning:`, `deprecated`, etc.)
-  * [ ] Exit codes
-* [ ] Remove noise commands (`ls`, `pwd`, etc.)
-* [ ] Group related commands into "blocks"
-* [ ] Display error/warning summary in terminal overlay
+* Parse command log to detect:
+  * Errors (`error:`, `fatal:`, `panic`)
+  * Warnings (`warning:`, `deprecated`, etc.)
+  * Exit codes
+* Remove noise commands (`ls`, `pwd`, etc.)
+* Group related commands into "blocks"
+* Display error/warning summary in terminal overlay
 
 ### Contextual Summarization (AI)
 
-* [ ] Format cleaned context into structured prompt
-* [ ] Send to model (OpenAI API, Ollama, etc.)
-* [ ] Display AI-suggested explanation + command flow
-* [ ] Add "Inject" button to run suggested fix
+* Format cleaned context into structured prompt
+* Send to model (OpenAI API, Ollama, etc.)
+* Display AI-suggested explanation + command flow
+* Add "Inject" button to run suggested fix
 
 ### Command Impact Tracker
 
-* [ ] Log each command + cwd + timestamp + exit code
-* [ ] Detect net-neutral sequences (e.g., enable + disable)
-* [ ] Track actual file changes, service state changes
-* [ ] Export only effective commands to `.sh` or `.md`
+* Log each command + cwd + timestamp + exit code
+* Detect net-neutral sequences (e.g., enable + disable)
+* Track actual file changes, service state changes
+* Export only effective commands to `.sh` or `.md`
 
 ### Regex Tooling
 
-* [ ] Let user select sample filenames or text
-* [ ] Generate regex pattern using static rules or ML
-* [ ] Test pattern locally on buffer
-* [ ] Show match/highlight results
+* Let user select sample filenames or text
+* Generate regex pattern using static rules or ML
+* Test pattern locally on buffer
+* Show match/highlight results
 
 ### Reproducible Script Exporter
 
-* [ ] Export command flow into `.sh` script
-* [ ] Add optional inline comments via AI
-* [ ] Export markdown version for docs/wiki
+* Export command flow into `.sh` script
+* Add optional inline comments via AI
+* Export markdown version for docs/wiki
 
 ### Journalctl Integration
 
-* [ ] Background thread monitors `journalctl -f --priority=3`
-* [ ] Tag log events with timestamps
-* [ ] Align log messages with command timeline
-* [ ] Show relevant kernel/service logs in summary
+* Background thread monitors `journalctl -f --priority=3`
+* Tag log events with timestamps
+* Align log messages with command timeline
+* Show relevant kernel/service logs in summary
 

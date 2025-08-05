@@ -1,83 +1,116 @@
-use clap::Command;
-use serde::Serialize;
-use serde::Deserialize;
-use std::alloc::System;
-use std::time::{SystemTime, UNIX_EPOCH};
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::Path;
 use chrono::Local;
-
+use crate::error::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct CommandEntry {
+pub struct CommandEntry {
     pub cmd: String, // command
     pub cwd: String, // current working directory
     pub timestamp: String,
     pub exit_code: i32,
-    pub output_string: String,
+    pub output: String,
+    pub duration_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct CommandLog {
-    pub cmd_entries: Vec<CommandEntry>,
-    pub curr_cmd: String,
-    pub curr_output: String,
+pub struct CommandLog {
+    pub entries: Vec<CommandEntry>,
+    #[serde(skip)]
+    pub current_cmd: String,
+    #[serde(skip)]
+    pub current_output: String,
+    #[serde(skip)]
+    pub current_start_time: Option<std::time::Instant>,
 }
 
 // >>> methods >>>
 
 impl CommandLog {
         
-    fn new() -> CommandLog {
-        let cmd_log = CommandLog{cmd_entries: Vec::new(), curr_cmd: String::new(), curr_output: String::new()};
-        cmd_log
+    pub fn new() -> CommandLog {
+        CommandLog {
+            entries: Vec::new(),
+            current_cmd: String::new(),
+            current_output: String::new(),
+            current_start_time: None,
+        }
     }
 
-    fn start_command(&mut self, cmd_string: String, cwd: String) {
-        self.curr_cmd = cmd_string;
-        self.curr_output = String::new();
+    pub fn start_command(&mut self, cmd_string: String, _cwd: String) {
+        self.current_cmd = cmd_string;
+        self.current_output = String::new();
+        self.current_start_time = Some(std::time::Instant::now());
     }
 
-    fn append_output(&mut self, output: &str) {
-        self.curr_output.push_str(output);
+    pub fn append_output(&mut self, output: &str) {
+        self.current_output.push_str(output);
     }
 
-    fn finish_command(&mut self, exit_code: i32, cwd: String) {
+    pub fn finish_command(&mut self, exit_code: i32, cwd: String) {
         let now = Local::now();
         let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string();
-        let entry = CommandEntry{cmd: self.curr_cmd.clone(), cwd: cwd, timestamp: timestamp, exit_code: exit_code, output_string: self.curr_output.clone()};
-        self.cmd_entries.push(entry);
-        self.curr_cmd = String::new();
-        self.curr_output = String::new();
+        
+        let duration_ms = self.current_start_time
+            .map(|start| start.elapsed().as_millis() as u64);
+        
+        let entry = CommandEntry {
+            cmd: self.current_cmd.clone(),
+            cwd,
+            timestamp,
+            exit_code,
+            output: self.current_output.clone(),
+            duration_ms,
+        };
+        
+        self.entries.push(entry);
+        self.current_cmd = String::new();
+        self.current_output = String::new();
+        self.current_start_time = None;
     }
 
-    // // >>> helper methods >>>
-    // fn get_recent() -> {
-    //     // TODO: implement get_recent
-    //     todo!()
-    // }
+    pub fn get_recent(&self, count: usize) -> Vec<&CommandEntry> {
+        let start = if self.entries.len() > count {
+            self.entries.len() - count
+        } else {
+            0
+        };
+        self.entries[start..].iter().collect()
+    }
 
-    // fn get_all() -> {
-    //     // TODO: implement get_all
-    //     todo!()
-    // }
+    pub fn get_all(&self) -> &Vec<CommandEntry> {
+        &self.entries
+    }
 
-    // fn clear() -> {
-    //     // TODO: implement clear
-    //     todo!()
-    // }
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.current_cmd = String::new();
+        self.current_output = String::new();
+        self.current_start_time = None;
+    }
 
-    // fn clear() -> {
-    //     // TODO: implement clear (duplicate)
-    //     todo!()
-    // }
+    pub fn save_to_file(&self, log_dir: &Path) -> Result<()> {
+        let commands_file = log_dir.join("commands.json");
+        let json_data = serde_json::to_string_pretty(self)?;
+        fs::write(commands_file, json_data)?;
+        Ok(())
+    }
 
-    // fn save_to_file() -> {
-    //     // TODO: implement save_to_file
-    //     todo!()
-    // }
-
-    // fn load_from_file() -> {
-    //     // TODO: implement load_from_file
-    //     todo!()
-    // }
-
+    pub fn load_from_file(log_dir: &Path) -> Result<CommandLog> {
+        let commands_file = log_dir.join("commands.json");
+        if !commands_file.exists() {
+            return Ok(CommandLog::new());
+        }
+        
+        let json_data = fs::read_to_string(commands_file)?;
+        let mut log: CommandLog = serde_json::from_str(&json_data)?;
+        
+        // initialize non-serialized fields
+        log.current_cmd = String::new();
+        log.current_output = String::new();
+        log.current_start_time = None;
+        
+        Ok(log)
+    }
 }

@@ -1,4 +1,6 @@
 use clap::{Parser, Subcommand};
+use crate::session::SessionManager;
+use crate::logging_pty::LoggingPtySession;
 
 /// CLI configuration for Recli
 #[derive(Parser, Debug, Clone)]
@@ -23,23 +25,23 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum RecliCommands {
-    /// Start capturing terminal session
+    /// start capturing terminal session
     Start,
     
-    /// Stop current capturing session
+    /// stop current capturing session
     Stop,
     
-    /// Show status of recli daemon
+    /// show status of recli daemon
     Status,
     
-    /// Show recent command history
+    /// show recent command history
     Recent {
-        /// Number of recent commands to show
+        /// number of recent commands to show
         #[arg(short = 'n', long, default_value = "10")]
         count: usize,
     },
     
-    /// Clear command history
+    /// clear command history
     Clear,
 }
 
@@ -75,11 +77,11 @@ impl Cli {
     }
 
     /// handle the subcommand execution
-    pub fn handle_command(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn handle_command(&self) -> Result<(), Box<dyn std::error::Error>> {
         match &self.command {
             RecliCommands::Start => {
                 self.verbose_print("Starting recli session...");
-                self.handle_start()
+                self.handle_start().await
             },
             RecliCommands::Stop => {
                 self.verbose_print("Stopping recli session...");
@@ -100,33 +102,75 @@ impl Cli {
         }
     }
 
-    fn handle_start(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: Start PTY session and command logging
-        println!("Starting recli session... (TODO: implement)");
+    async fn handle_start(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut session_manager = SessionManager::new();
+        
+        if session_manager.is_session_active() {
+            println!("session already active");
+            return Ok(());
+        }
+
+        let shell = self.get_shell();
+        self.print_startup_info(&shell);
+        
+        let config = session_manager.start_session(&shell, self.verbose)?;
+        println!("session started with id: {}", config.session_id);
+        println!("logs will be saved to: {}", config.log_dir.display());
+        
+        // start logging pty session
+        let mut logging_pty = LoggingPtySession::new(self.verbose, session_manager);
+        logging_pty.run(&shell).await?;
+        
         Ok(())
     }
 
     fn handle_stop(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: Stop running session
-        println!("Stopping recli session... (TODO: implement)");
+        let mut session_manager = SessionManager::new();
+        
+        if !session_manager.is_session_active() {
+            println!("no active session");
+            return Ok(());
+        }
+
+        if let Some(log_dir) = session_manager.stop_session()? {
+            println!("session stopped successfully");
+            println!("all terminal commands and outputs saved to: {}", log_dir.display());
+        } else {
+            println!("no session was active");
+        }
+        
         Ok(())
     }
 
     fn handle_status(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: Check if session is running
-        println!("Recli status... (TODO: implement)");
+        let session_manager = SessionManager::new();
+        println!("{}", session_manager.get_status());
         Ok(())
     }
 
     fn handle_recent(&self, count: usize) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: Show recent commands from log
-        println!("Showing {} recent commands... (TODO: implement)", count);
+        let session_manager = SessionManager::new();
+        
+        if !session_manager.is_session_active() {
+            println!("no active session");
+            return Ok(());
+        }
+
+        // TODO: load recent commands from current session log
+        println!("showing {} recent commands... (TODO: implement loading from active session)", count);
         Ok(())
     }
 
     fn handle_clear(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: Clear command history
-        println!("Clearing command history... (TODO: implement)");
+        let session_manager = SessionManager::new();
+        
+        if !session_manager.is_session_active() {
+            println!("no active session");
+            return Ok(());
+        }
+
+        // TODO: clear current session log
+        println!("clearing command history... (TODO: implement for active session)");
         Ok(())
     }
 }

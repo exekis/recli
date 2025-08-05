@@ -20,9 +20,13 @@
 
 * [x] Create CommandEntry and CommandLog data structures
 * [x] Implement command logging methods (`start_command`, `append_output`, `finish_command`)
-* [ ] Integrate command detection with PTY output parsing
-* [ ] Include cwd and exit code per command (structures ready)
-* [ ] Save history to structured log (methods ready)
+* [x] Integrate command detection with PTY output parsing
+* [x] Include cwd and exit code per command (structures ready)
+* [x] Save history to structured log (methods ready)
+* [x] Create session management system
+* [x] Implement safe log directory creation (~/.recli/logs/)
+* [x] Add JSON serialization for terminal logs
+* [x] Create start/stop commands with session state tracking
 
 ### **Phase 3: Context Summarizer**
 

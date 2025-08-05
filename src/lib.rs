@@ -4,3 +4,6 @@ pub mod error;
 pub mod io;
 pub mod pty;
 pub mod command_log;
+pub mod session;
+pub mod command_detector;
+pub mod logging_pty;

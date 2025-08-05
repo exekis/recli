@@ -7,7 +7,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse_args();
     
     // handle the subcommand
-    if let Err(e) = cli.handle_command() {
+    if let Err(e) = cli.handle_command().await {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }

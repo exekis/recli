@@ -11,8 +11,8 @@
 
 ### **Phase 1: MVP**
 
-* [x] Run basic shell passthrough via PTY
-* [x] Intercept `Ctrl+X` via `crossterm`
+* [x] Run basic shell passthrough with PTY
+* [x] Intercept `Ctrl+X` with `crossterm`
 * [x] Print "Hotkey detected!" as test
 * [x] Add CLI subcommands (`start`, `stop`, `status`, `recent`, `clear`)
 
@@ -38,7 +38,7 @@
 ### **Phase 4: Command Impact Tracker**
 
 * [ ] Detect canceling commands
-* [ ] Mark files added/removed (via snapshots or `inotify`)
+* [ ] Mark files added/removed (with snapshots or `inotify`)
 * [ ] Show final list of commands that changed system state
 
 ### **Phase 5: Regex Assistant**

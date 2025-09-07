@@ -33,13 +33,13 @@ impl InputHandler {
             KeyCode::Enter => Some(b"\r".to_vec()),
             KeyCode::Backspace => Some(vec![127]), // DEL character
             KeyCode::Tab => Some(b"\t".to_vec()),
-            
+
             // arrow keys ANSI escape sequences
             KeyCode::Up => Some(b"\x1b[A".to_vec()),
             KeyCode::Down => Some(b"\x1b[B".to_vec()),
             KeyCode::Right => Some(b"\x1b[C".to_vec()),
             KeyCode::Left => Some(b"\x1b[D".to_vec()),
-            
+
             // function keys
             KeyCode::F(n) => match n {
                 1..=12 => {
@@ -48,20 +48,20 @@ impl InputHandler {
                 }
                 _ => None,
             },
-            
+
             // page navigation
             KeyCode::PageUp => Some(b"\x1b[5~".to_vec()),
             KeyCode::PageDown => Some(b"\x1b[6~".to_vec()),
             KeyCode::Home => Some(b"\x1b[H".to_vec()),
             KeyCode::End => Some(b"\x1b[F".to_vec()),
-            
+
             // insert/delete
             KeyCode::Insert => Some(b"\x1b[2~".to_vec()),
             KeyCode::Delete => Some(b"\x1b[3~".to_vec()),
-            
+
             // escape key
             KeyCode::Esc => Some(b"\x1b".to_vec()),
-            
+
             // ignore other keys for now
             _ => None,
         }

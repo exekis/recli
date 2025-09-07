@@ -20,10 +20,10 @@ impl CommandDetector {
             // zsh/bash prompts: typically end with $ or %
             Regex::new(r"[$%#>]\s*$").unwrap(),
             // more specific patterns
-            Regex::new(r"\$\s*$").unwrap(),  // bash
-            Regex::new(r"%\s*$").unwrap(),   // zsh
-            Regex::new(r"#\s*$").unwrap(),   // root
-            Regex::new(r">\s*$").unwrap(),   // windows or custom
+            Regex::new(r"\$\s*$").unwrap(), // bash
+            Regex::new(r"%\s*$").unwrap(),  // zsh
+            Regex::new(r"#\s*$").unwrap(),  // root
+            Regex::new(r">\s*$").unwrap(),  // windows or custom
         ];
 
         Self {
@@ -39,7 +39,7 @@ impl CommandDetector {
     pub fn process_output(&mut self, data: &[u8]) -> Vec<u8> {
         // convert bytes to string, handling partial UTF-8 carefully
         let text = String::from_utf8_lossy(data);
-        
+
         for ch in text.chars() {
             match ch {
                 '\r' => {
@@ -73,7 +73,7 @@ impl CommandDetector {
 
     fn process_line(&mut self) {
         let line = self.current_line.trim().to_string(); // clone to avoid borrow conflicts
-        
+
         if line.is_empty() {
             return;
         }
@@ -96,7 +96,7 @@ impl CommandDetector {
     fn is_prompt_line(&self, line: &str) -> bool {
         // remove ANSI escape sequences for pattern matching
         let clean_line = self.strip_ansi_codes(line);
-        
+
         for pattern in &self.prompt_patterns {
             if pattern.is_match(&clean_line) {
                 return true;
@@ -121,7 +121,7 @@ impl CommandDetector {
         // try to extract the command part from a prompt line
         // this is tricky because prompts vary widely
         let clean_line = self.strip_ansi_codes(line);
-        
+
         // look for common patterns: prompt ends with $ % # > followed by command
         for pattern in &self.prompt_patterns {
             if let Some(captures) = pattern.find(&clean_line) {
@@ -147,7 +147,7 @@ impl CommandDetector {
     fn start_new_command(&mut self, command: String) {
         self.in_command = true;
         self.current_command = Some(command.clone());
-        
+
         // get current working directory (best effort)
         let cwd = std::env::current_dir()
             .map(|p| p.to_string_lossy().to_string())
@@ -162,8 +162,8 @@ impl CommandDetector {
     fn handle_command_output(&mut self, line: &str) {
         // send output to logger
         if let Ok(session_manager) = self.session_manager.lock() {
-            session_manager.send_log_event(LogEvent::Output { 
-                data: format!("{}\n", line) 
+            session_manager.send_log_event(LogEvent::Output {
+                data: format!("{}\n", line),
             });
         }
     }

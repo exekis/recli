@@ -1,6 +1,6 @@
+use crate::command_detector::CommandDetector;
 use crate::error::{RecliError, Result};
 use crate::io::{InputHandler, OutputHandler};
-use crate::command_detector::CommandDetector;
 use crate::session::SessionManager;
 use crossterm::{
     event::{self, Event},
@@ -20,7 +20,7 @@ pub struct PtySession {
 impl PtySession {
     /// new PTY session
     pub fn new(verbose: bool) -> Self {
-        Self { 
+        Self {
             verbose,
             command_detector: None,
         }
@@ -30,8 +30,8 @@ impl PtySession {
     pub fn new_with_logging(verbose: bool, session_manager: SessionManager) -> Self {
         let session_manager = Arc::new(Mutex::new(session_manager));
         let command_detector = Arc::new(Mutex::new(CommandDetector::new(session_manager)));
-        
-        Self { 
+
+        Self {
             verbose,
             command_detector: Some(command_detector),
         }
@@ -58,11 +58,13 @@ impl PtySession {
             .spawn_command(cmd)
             .map_err(|e| RecliError::Pty(e.into()))?;
 
-        self.verbose_print(&format!("PTY session started with PID: {:?}", child.process_id()));
+        self.verbose_print(&format!(
+            "PTY session started with PID: {:?}",
+            child.process_id()
+        ));
 
         // set up terminal for raw input
-        enable_raw_mode()
-            .map_err(|e| RecliError::Terminal(format!("{:?}", e.kind())))?;
+        enable_raw_mode().map_err(|e| RecliError::Terminal(format!("{:?}", e.kind())))?;
 
         // get PTY handles
         let mut pty_reader = pty_pair
@@ -83,7 +85,7 @@ impl PtySession {
                     Ok(0) => break, // EOF - shell exited
                     Ok(n) => {
                         let mut processed = buffer[..n].to_vec();
-                        
+
                         // if we have command detection, process through it
                         if let Some(detector) = &command_detector {
                             if let Ok(mut detector) = detector.lock() {
@@ -92,7 +94,7 @@ impl PtySession {
                         } else {
                             processed = OutputHandler::process_output(&processed);
                         }
-                        
+
                         if OutputHandler::forward_to_stdout(&processed).is_err() {
                             break;
                         }
@@ -103,11 +105,12 @@ impl PtySession {
         });
 
         // input handling loop
-        let result = self.input_loop(&mut child, &mut pty_writer, &pty_pair).await;
+        let result = self
+            .input_loop(&mut child, &mut pty_writer, &pty_pair)
+            .await;
 
         // cleanup
-        disable_raw_mode()
-            .map_err(|e| RecliError::Terminal(format!("{:?}", e.kind())))?;
+        disable_raw_mode().map_err(|e| RecliError::Terminal(format!("{:?}", e.kind())))?;
         output_task.abort();
 
         self.verbose_print("PTY session ended");
@@ -124,7 +127,10 @@ impl PtySession {
         loop {
             // if shell process is still alive
             if let Ok(Some(exit_status)) = child.try_wait() {
-                self.verbose_print(&format!("Shell process exited with status: {:?}", exit_status));
+                self.verbose_print(&format!(
+                    "Shell process exited with status: {:?}",
+                    exit_status
+                ));
                 break;
             }
 
@@ -168,12 +174,7 @@ impl PtySession {
     }
 
     /// handle terminal resize events
-    fn handle_resize(
-        &self,
-        cols: u16,
-        rows: u16,
-        pty_pair: &portable_pty::PtyPair,
-    ) -> Result<()> {
+    fn handle_resize(&self, cols: u16, rows: u16, pty_pair: &portable_pty::PtyPair) -> Result<()> {
         let new_size = PtySize {
             rows,
             cols,

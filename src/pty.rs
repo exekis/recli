@@ -355,18 +355,98 @@ fn extract_cmd_after_prompt(line: &str) -> String {
     let markers = ["$", "%", "#", ">", "❯", "➜", ""]; 
     let mut idx: Option<usize> = None;
     for m in markers.iter() {
-        if let Some(i) = line.rfind(m) {
-            idx = Some(match idx {
-                Some(cur) => if i > cur { i } else { cur },
-                None => i,
-            });
+        if !m.is_empty() {  // Skip empty markers
+            if let Some(i) = line.rfind(m) {
+                idx = Some(match idx {
+                    Some(cur) => if i > cur { i } else { cur },
+                    None => i,
+                });
+            }
         }
     }
     if let Some(i) = idx {
         // take text after marker and any following space
-        let tail = &line[i+1..];
+        // Find the marker that matches at position i to get its length
+        for marker in markers.iter() {
+            if !marker.is_empty() && line[i..].starts_with(marker) {
+                let after_marker_pos = i + marker.len();
+                let tail = if after_marker_pos <= line.len() && line.is_char_boundary(after_marker_pos) {
+                    &line[after_marker_pos..]
+                } else {
+                    // Find next character boundary
+                    match (after_marker_pos..line.len()).find(|&pos| line.is_char_boundary(pos)) {
+                        Some(pos) => &line[pos..],
+                        None => "",
+                    }
+                };
+                return tail.trim_start().to_string();
+            }
+        }
+        
+        // Fallback: if no marker matches (shouldn't happen), use char boundary logic
+        let tail = if line.is_char_boundary(i+1) {
+            &line[i+1..]
+        } else {
+            // Find next character boundary
+            match (i+1..line.len()).find(|&pos| line.is_char_boundary(pos)) {
+                Some(pos) => &line[pos..],
+                None => "",
+            }
+        };
         return tail.trim_start().to_string();
     }
     // if no marker, return full line (it might be a bare input line)
     line.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_cmd_after_prompt_with_unicode() {
+        // Test case with the powerline character that was causing the panic
+        let prompt_with_unicode = "~/code/recli feat/m0-hardening !8 ?2  echo hello world";
+        let result = extract_cmd_after_prompt(prompt_with_unicode);
+        // This string has no markers, so it should return the whole string
+        assert_eq!(result, "~/code/recli feat/m0-hardening !8 ?2  echo hello world");
+
+        // Test case with the exact Unicode character from the error
+        let prompt_with_powerline = "~/code/recli\u{e0b0} $ ls -la";
+        let result = extract_cmd_after_prompt(prompt_with_powerline);
+        assert_eq!(result, "ls -la");
+
+        // Test case with just the powerline character (should not panic)
+        let prompt_only_powerline = "~/code/recli features\u{e0b0} echo test";
+        let result = extract_cmd_after_prompt(prompt_only_powerline);
+        assert_eq!(result, "echo test");
+    }
+
+    #[test]
+    fn test_extract_cmd_after_prompt_basic() {
+        assert_eq!(extract_cmd_after_prompt("$ echo hello"), "echo hello");
+        assert_eq!(extract_cmd_after_prompt("% ls -la"), "ls -la");
+        assert_eq!(extract_cmd_after_prompt("# pwd"), "pwd");
+        assert_eq!(extract_cmd_after_prompt("> git status"), "git status");
+        assert_eq!(extract_cmd_after_prompt("❯ npm test"), "npm test");
+        assert_eq!(extract_cmd_after_prompt("➜ cargo build"), "cargo build");
+    }
+
+    #[test]
+    fn test_extract_cmd_after_prompt_with_spaces() {
+        assert_eq!(extract_cmd_after_prompt("$   echo hello"), "echo hello");
+        assert_eq!(extract_cmd_after_prompt("%\t\tls"), "ls");
+    }
+
+    #[test]
+    fn test_extract_cmd_after_prompt_no_marker() {
+        assert_eq!(extract_cmd_after_prompt("plain command"), "plain command");
+        assert_eq!(extract_cmd_after_prompt(""), "");
+    }
+
+    #[test]
+    fn test_extract_cmd_after_prompt_multiple_markers() {
+        // Should find the last occurrence
+        assert_eq!(extract_cmd_after_prompt("$ cd /path/with$ $ echo test"), "echo test");
+    }
 }

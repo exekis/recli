@@ -1,8 +1,8 @@
+use crate::error::Result;
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use chrono::Local;
-use crate::error::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommandEntry {
@@ -28,7 +28,6 @@ pub struct CommandLog {
 // >>> methods >>>
 
 impl CommandLog {
-        
     pub fn new() -> CommandLog {
         CommandLog {
             entries: Vec::new(),
@@ -49,12 +48,13 @@ impl CommandLog {
     }
 
     pub fn finish_command(&mut self, exit_code: i32, cwd: String) {
-        let now = Local::now();
-        let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string();
-        
-        let duration_ms = self.current_start_time
+    // use rfc3339 utc to be cosmos-ready and schema-stable
+    let timestamp = Utc::now().to_rfc3339();
+
+        let duration_ms = self
+            .current_start_time
             .map(|start| start.elapsed().as_millis() as u64);
-        
+
         let entry = CommandEntry {
             cmd: self.current_cmd.clone(),
             cwd,
@@ -63,7 +63,7 @@ impl CommandLog {
             output: self.current_output.clone(),
             duration_ms,
         };
-        
+
         self.entries.push(entry);
         self.current_cmd = String::new();
         self.current_output = String::new();
@@ -102,15 +102,15 @@ impl CommandLog {
         if !commands_file.exists() {
             return Ok(CommandLog::new());
         }
-        
+
         let json_data = fs::read_to_string(commands_file)?;
         let mut log: CommandLog = serde_json::from_str(&json_data)?;
-        
+
         // initialize non-serialized fields
         log.current_cmd = String::new();
         log.current_output = String::new();
         log.current_start_time = None;
-        
+
         Ok(log)
     }
 }

@@ -29,7 +29,10 @@ impl LoggingPtySession {
     }
 
     pub async fn run(&mut self, shell: &str) -> Result<()> {
-        self.verbose_print(&format!("Starting logging PTY session with shell: {}", shell));
+        self.verbose_print(&format!(
+            "Starting logging PTY session with shell: {}",
+            shell
+        ));
 
         // create PTY system and get terminal size
         let pty_system = portable_pty::native_pty_system();
@@ -48,11 +51,13 @@ impl LoggingPtySession {
             .spawn_command(cmd)
             .map_err(|e| RecliError::Pty(e.into()))?;
 
-        self.verbose_print(&format!("PTY session started with PID: {:?}", child.process_id()));
+        self.verbose_print(&format!(
+            "PTY session started with PID: {:?}",
+            child.process_id()
+        ));
 
         // set up terminal for raw input
-        enable_raw_mode()
-            .map_err(|e| RecliError::Terminal(format!("{:?}", e.kind())))?;
+        enable_raw_mode().map_err(|e| RecliError::Terminal(format!("{:?}", e.kind())))?;
 
         // get PTY handles
         let mut pty_reader = pty_pair
@@ -74,14 +79,14 @@ impl LoggingPtySession {
                     Ok(n) => {
                         let data = &buffer[..n];
                         let text = String::from_utf8_lossy(data);
-                        
+
                         // log all output
                         if let Ok(session_manager) = session_manager_clone.lock() {
-                            session_manager.send_log_event(LogEvent::Output { 
-                                data: text.to_string() 
+                            session_manager.send_log_event(LogEvent::Output {
+                                data: text.to_string(),
                             });
                         }
-                        
+
                         // forward to stdout
                         if OutputHandler::forward_to_stdout(data).is_err() {
                             break;
@@ -93,11 +98,12 @@ impl LoggingPtySession {
         });
 
         // input handling loop
-        let result = self.input_loop(&mut child, &mut pty_writer, &pty_pair).await;
+        let result = self
+            .input_loop(&mut child, &mut pty_writer, &pty_pair)
+            .await;
 
         // cleanup
-        disable_raw_mode()
-            .map_err(|e| RecliError::Terminal(format!("{:?}", e.kind())))?;
+        disable_raw_mode().map_err(|e| RecliError::Terminal(format!("{:?}", e.kind())))?;
         output_task.abort();
 
         // stop session and save logs
@@ -120,7 +126,10 @@ impl LoggingPtySession {
         loop {
             // if shell process is still alive
             if let Ok(Some(exit_status)) = child.try_wait() {
-                self.verbose_print(&format!("Shell process exited with status: {:?}", exit_status));
+                self.verbose_print(&format!(
+                    "Shell process exited with status: {:?}",
+                    exit_status
+                ));
                 break;
             }
 
@@ -178,16 +187,13 @@ impl LoggingPtySession {
                 .unwrap_or_else(|_| "/unknown".to_string());
 
             if let Ok(session_manager) = self.session_manager.lock() {
-                session_manager.send_log_event(LogEvent::CommandStart { 
-                    cmd: cmd.to_string(), 
-                    cwd: cwd.clone()
+                session_manager.send_log_event(LogEvent::CommandStart {
+                    cmd: cmd.to_string(),
+                    cwd: cwd.clone(),
                 });
-                
+
                 // immediately end the command with success (we can't easily detect real exit codes)
-                session_manager.send_log_event(LogEvent::CommandEnd { 
-                    exit_code: 0, 
-                    cwd 
-                });
+                session_manager.send_log_event(LogEvent::CommandEnd { exit_code: 0, cwd });
             }
         }
     }
@@ -203,12 +209,7 @@ impl LoggingPtySession {
         Ok(())
     }
 
-    fn handle_resize(
-        &self,
-        cols: u16,
-        rows: u16,
-        pty_pair: &portable_pty::PtyPair,
-    ) -> Result<()> {
+    fn handle_resize(&self, cols: u16, rows: u16, pty_pair: &portable_pty::PtyPair) -> Result<()> {
         let new_size = PtySize {
             rows,
             cols,

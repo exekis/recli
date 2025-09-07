@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
+use chrono::{Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionConfig {
@@ -33,7 +34,7 @@ impl SessionManager {
     pub fn new() -> Self {
         let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         let pid_file = Path::new(&home_dir).join(".recli").join("session.pid");
-        
+
         Self {
             config: None,
             command_log: Arc::new(Mutex::new(CommandLog::new())),
@@ -65,11 +66,12 @@ impl SessionManager {
         // create session directory
         let session_id = self.generate_session_id();
         let log_dir = self.create_log_directory(&session_id)?;
-        
+
         let config = SessionConfig {
             session_id: session_id.clone(),
             log_dir: log_dir.clone(),
-            started_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            // use rfc3339 utc for schema stability
+            started_at: Utc::now().to_rfc3339(),
             shell: shell.to_string(),
         };
 
@@ -112,7 +114,7 @@ impl SessionManager {
         });
 
         self.config = Some(config.clone());
-        
+
         if verbose {
             println!("session started with id: {}", session_id);
             println!("logs will be saved to: {}", log_dir.display());
@@ -132,7 +134,7 @@ impl SessionManager {
         if let Some(config) = &self.config {
             let log = self.command_log.lock().unwrap();
             log.save_to_file(&config.log_dir)?;
-            
+
             // save session metadata
             let metadata_file = config.log_dir.join("session_metadata.json");
             let metadata = serde_json::to_string_pretty(config)?;
@@ -143,7 +145,7 @@ impl SessionManager {
         if self.pid_file.exists() {
             fs::remove_file(&self.pid_file)?;
         }
-        
+
         self.config = None;
         self.log_sender = None;
 
@@ -180,7 +182,7 @@ impl SessionManager {
         let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         let base_dir = Path::new(&home_dir).join(".recli").join("logs");
         let log_dir = base_dir.join(session_id);
-        
+
         fs::create_dir_all(&log_dir)?;
         Ok(log_dir)
     }
@@ -189,11 +191,9 @@ impl SessionManager {
         // on unix systems check if process exists by sending signal 0
         #[cfg(unix)]
         {
-            unsafe {
-                libc::kill(pid as i32, 0) == 0
-            }
+            unsafe { libc::kill(pid as i32, 0) == 0 }
         }
-        
+
         #[cfg(not(unix))]
         {
             // fallback for non-unix systems

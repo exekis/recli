@@ -1,4 +1,4 @@
-use crate::logging_pty::LoggingPtySession;
+use crate::pty::PtySession;
 use crate::session::SessionManager;
 use clap::{Parser, Subcommand};
 use crate::schema::{log_event::LogEventV1, validation::validate_event};
@@ -6,6 +6,8 @@ use chrono::{DateTime, Local, Utc, NaiveDateTime, TimeZone};
 use std::fs;
 use std::path::PathBuf;
 use hostname;
+use crate::config::Config;
+use crate::util::telemetry;
 
 /// CLI configuration for Recli
 #[derive(Parser, Debug, Clone)]
@@ -55,6 +57,9 @@ pub enum RecliCommands {
         #[arg(short, long)]
         path: Option<String>,
     },
+
+    /// show effective configuration (env + file)
+    Config,
 }
 
 impl Cli {
@@ -93,6 +98,9 @@ impl Cli {
 
     /// handle the subcommand execution
     pub async fn handle_command(&self) -> Result<(), Box<dyn std::error::Error>> {
+    // initialize config and telemetry first
+    let cfg = Config::load(self.config.as_deref());
+    telemetry::init(&cfg.logging.level);
         match &self.command {
             RecliCommands::Start => {
                 self.verbose_print("Starting recli session...");
@@ -118,6 +126,10 @@ impl Cli {
                 self.verbose_print("Validating logs against schema...");
                 self.handle_validate(path.as_deref())
             }
+            RecliCommands::Config => {
+                println!("{}", serde_json::to_string_pretty(&cfg)?);
+                Ok(())
+            }
         }
     }
 
@@ -136,9 +148,9 @@ impl Cli {
         println!("session started with id: {}", config.session_id);
         println!("logs will be saved to: {}", config.log_dir.display());
 
-        // start logging pty session
-        let mut logging_pty = LoggingPtySession::new(self.verbose, session_manager);
-        logging_pty.run(&shell).await?;
+    // start logging pty session with prompt-based detector
+    let mut pty = PtySession::new_with_logging(self.verbose, session_manager);
+    pty.run(&shell).await?;
 
         Ok(())
     }

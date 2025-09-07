@@ -7,4 +7,6 @@ pub mod io;
 pub mod logging_pty;
 pub mod pty;
 pub mod schema;
+pub mod config;
+pub mod util;
 pub mod session;

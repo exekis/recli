@@ -132,7 +132,15 @@ impl SessionManager {
 
         // save final log
         if let Some(config) = &self.config {
-            let log = self.command_log.lock().unwrap();
+            // close sender to stop background logging before flush
+            self.log_sender = None;
+
+            // flush any in-progress command to ensure persistence
+            let cwd = std::env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| "/unknown".to_string());
+            let mut log = self.command_log.lock().unwrap();
+            log.force_flush(cwd);
             log.save_to_file(&config.log_dir)?;
 
             // save session metadata

@@ -44,6 +44,14 @@ impl CommandLog {
     }
 
     pub fn append_output(&mut self, output: &str) {
+        // if no active command, start a synthetic one so output is not lost
+        if self.current_cmd.is_empty() {
+            // best effort cwd
+            let cwd = std::env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| "/unknown".to_string());
+            self.start_command("<captured>".to_string(), cwd);
+        }
         self.current_output.push_str(output);
     }
 
@@ -88,6 +96,14 @@ impl CommandLog {
         self.current_cmd = String::new();
         self.current_output = String::new();
         self.current_start_time = None;
+    }
+
+    /// push a pending command into entries if one is in progress
+    pub fn force_flush(&mut self, cwd: String) {
+        if !self.current_cmd.is_empty() {
+            // finish with exit code 0 by default
+            self.finish_command(0, cwd);
+        }
     }
 
     pub fn save_to_file(&self, log_dir: &Path) -> Result<()> {

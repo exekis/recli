@@ -1,29 +1,22 @@
 use crate::error::Result;
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use std::io::Write;
 
-/// handles the conversion of terminal events to PTY input
+/// handles the conversion of terminal events to pty input
 pub struct InputHandler;
 
 impl InputHandler {
-    /// convert a crossterm KeyEvent to bytes that can be sent to PTY
-    /// returns None if this is a special hotkey that shouldn't be forwarded
+    /// convert a crossterm keyevent to bytes that can be sent to pty
+    /// returns none if this is a special hotkey that shouldn't be forwarded
     pub fn key_to_bytes(key_event: KeyEvent) -> Option<Vec<u8>> {
         if key_event.kind != KeyEventKind::Press {
             return None;
         }
 
-        // check for ctrl+x hotkey before processing other keys
-        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
-            if let KeyCode::Char('x') = key_event.code {
-                // detected ctrl+x so handle it and don't forward to pty
-                println!("\r\n[RECLI] Hotkey detected! (Ctrl+X intercepted)");
-                return None;
-            }
-        }
+    // no hotkey interception; all keys pass through to the shell
 
         match key_event.code {
-            // gegular characters encode as UTF-8
+            // regular characters encode as utf-8
             KeyCode::Char(c) => {
                 let mut bytes = [0u8; 4];
                 let encoded = c.encode_utf8(&mut bytes);
@@ -34,7 +27,7 @@ impl InputHandler {
             KeyCode::Backspace => Some(vec![127]), // DEL character
             KeyCode::Tab => Some(b"\t".to_vec()),
 
-            // arrow keys ANSI escape sequences
+            // arrow keys ansi escape sequences
             KeyCode::Up => Some(b"\x1b[A".to_vec()),
             KeyCode::Down => Some(b"\x1b[B".to_vec()),
             KeyCode::Right => Some(b"\x1b[C".to_vec()),
@@ -43,7 +36,7 @@ impl InputHandler {
             // function keys
             KeyCode::F(n) => match n {
                 1..=12 => {
-                    // F1-F12 escape sequences
+                    // f1-f12 escape sequences
                     Some(format!("\x1b[{};2~", n + 10).into_bytes())
                 }
                 _ => None,
@@ -70,20 +63,20 @@ impl InputHandler {
     /// special key combinations
     pub fn handle_control_key(c: char) -> Option<Vec<u8>> {
         match c {
-            'c' => Some(vec![3]),  // Ctrl+C
-            'd' => Some(vec![4]),  // Ctrl+D (EOF)
-            'z' => Some(vec![26]), // Ctrl+Z (suspend)
-            'l' => Some(vec![12]), // Ctrl+L (clear screen)
+            'c' => Some(vec![3]),  // ctrl+c
+            'd' => Some(vec![4]),  // ctrl+d (eof)
+            'z' => Some(vec![26]), // ctrl+z (suspend)
+            'l' => Some(vec![12]), // ctrl+l (clear screen)
             _ => None,
         }
     }
 }
 
-/// handles the output from PTY to terminal
+/// handles the output from pty to terminal
 pub struct OutputHandler;
 
 impl OutputHandler {
-    /// forward PTY output to stdout with error handling
+    /// forward pty output to stdout with error handling
     pub fn forward_to_stdout(buffer: &[u8]) -> Result<()> {
         let mut stdout = std::io::stdout();
         stdout.write_all(buffer)?;
@@ -91,7 +84,7 @@ impl OutputHandler {
         Ok(())
     }
 
-    /// process and potentially filter PTY output
+    /// process and potentially filter pty output
     /// (where ill add features like error detection)
     pub fn process_output(buffer: &[u8]) -> Vec<u8> {
         // for now just pass through unchanged

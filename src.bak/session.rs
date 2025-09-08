@@ -21,13 +21,14 @@ pub struct SessionManager {
     command_log: Arc<Mutex<CommandLog>>,
     pid_file: PathBuf,
     log_sender: Option<mpsc::UnboundedSender<LogEvent>>,
+    log_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 #[derive(Debug, Clone)]
 pub enum LogEvent {
     CommandStart { cmd: String, cwd: String },
-    Output { data: String },
-    CommandEnd { exit_code: i32, cwd: String },
+    Output { data: Vec<u8> },
+    CommandEnd { exit_code: i32, pipestatus: Option<Vec<i32>>, cwd: String },
 }
 
 impl SessionManager {
@@ -40,6 +41,7 @@ impl SessionManager {
             command_log: Arc::new(Mutex::new(CommandLog::new())),
             pid_file,
             log_sender: None,
+            log_task: None,
         }
     }
 
@@ -56,6 +58,22 @@ impl SessionManager {
             }
         }
         false
+    }
+
+    /// return the active session pid if present and alive
+    pub fn active_pid(&self) -> Option<u32> {
+        if !self.pid_file.exists() {
+            return None;
+        }
+
+        if let Ok(pid_str) = fs::read_to_string(&self.pid_file) {
+            if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                if self.process_exists(pid) {
+                    return Some(pid);
+                }
+            }
+        }
+        None
     }
 
     pub fn start_session(&mut self, shell: &str, verbose: bool) -> Result<SessionConfig> {
@@ -88,30 +106,29 @@ impl SessionManager {
         let (tx, mut rx) = mpsc::unbounded_channel();
         self.log_sender = Some(tx);
 
-        let command_log = Arc::clone(&self.command_log);
+    let command_log = Arc::clone(&self.command_log);
         let config_clone = config.clone();
 
-        // spawn logging task
-        tokio::spawn(async move {
+    // spawn logging task
+    let handle = tokio::spawn(async move {
             while let Some(event) = rx.recv().await {
                 let mut log = command_log.lock().unwrap();
                 match event {
                     LogEvent::CommandStart { cmd, cwd } => {
-                        log.start_command(cmd, cwd);
+                        log.start_command(cmd, cwd, &config_clone.log_dir);
                     }
                     LogEvent::Output { data } => {
-                        log.append_output(&data);
+                        log.append_output_bytes(&data);
                     }
-                    LogEvent::CommandEnd { exit_code, cwd } => {
-                        log.finish_command(exit_code, cwd);
-                        // save to file after each command
-                        if let Err(e) = log.save_to_file(&config_clone.log_dir) {
-                            eprintln!("failed to save command log: {}", e);
-                        }
+                    LogEvent::CommandEnd { exit_code, pipestatus, cwd } => {
+                        log.finish_command(exit_code, pipestatus, cwd, &config_clone.log_dir);
+                        // optional: keep the file warm in long sessions
+                        let _ = log.save_to_file(&config_clone.log_dir);
                     }
                 }
             }
-        });
+    });
+    self.log_task = Some(handle);
 
         self.config = Some(config.clone());
 
@@ -123,16 +140,39 @@ impl SessionManager {
         Ok(config)
     }
 
+    // sync wrapper for callers expecting a blocking stop
     pub fn stop_session(&mut self) -> Result<Option<PathBuf>> {
+        let handle = tokio::runtime::Handle::current();
+        handle.block_on(self.stop_session_async())
+    }
+
+    pub async fn stop_session_async(&mut self) -> Result<Option<PathBuf>> {
         if !self.is_session_active() {
             return Ok(None);
         }
 
         let log_dir = self.config.as_ref().map(|c| c.log_dir.clone());
 
+        // close the sender so the receiver can drain and exit
+        self.log_sender = None;
+
+        // wait for the logging task to finish processing all buffered events
+        if let Some(task) = self.log_task.take() {
+            let _ = task.await;
+        }
+
         // save final log
         if let Some(config) = &self.config {
-            let log = self.command_log.lock().unwrap();
+            let mut log = self.command_log.lock().unwrap();
+            // defensively finalize any in-flight command to prevent empty logs
+            if !log.current_cmd.is_empty() {
+                let cwd = std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| "/unknown".to_string());
+                // assume success exit code if unknown without shell integration
+                let log_dir = &config.log_dir;
+                log.finish_command(0, None, cwd, log_dir);
+            }
             log.save_to_file(&config.log_dir)?;
 
             // save session metadata
@@ -167,6 +207,11 @@ impl SessionManager {
         }
     }
 
+    /// return a copy of the current session config if available
+    pub fn current_config(&self) -> Option<SessionConfig> {
+        self.config.clone()
+    }
+
     pub fn send_log_event(&self, event: LogEvent) {
         if let Some(sender) = &self.log_sender {
             let _ = sender.send(event);
@@ -199,5 +244,10 @@ impl SessionManager {
             // fallback for non-unix systems
             false
         }
+    }
+
+    /// public wrapper used by cli to poll termination
+    pub fn process_exists_public(&self, pid: u32) -> bool {
+        self.process_exists(pid)
     }
 }

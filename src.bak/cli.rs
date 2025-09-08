@@ -8,6 +8,9 @@ use std::path::PathBuf;
 use hostname;
 use crate::config::Config;
 use crate::util::telemetry;
+use std::time::{Duration, Instant};
+#[cfg(unix)]
+use libc;
 
 /// CLI configuration for Recli
 #[derive(Parser, Debug, Clone)]
@@ -35,8 +38,9 @@ pub enum RecliCommands {
     /// start capturing terminal session
     Start,
 
-    /// stop current capturing session
-    Stop,
+    /// end current capturing session and save logs
+    #[command(alias = "stop")] // keep stop as an alias for backward compatibility
+    End,
 
     /// show status of recli daemon
     Status,
@@ -106,9 +110,9 @@ impl Cli {
                 self.verbose_print("Starting recli session...");
                 self.handle_start().await
             }
-            RecliCommands::Stop => {
-                self.verbose_print("Stopping recli session...");
-                self.handle_stop()
+            RecliCommands::End => {
+                self.verbose_print("Ending recli session...");
+                self.handle_end()
             }
             RecliCommands::Status => {
                 self.verbose_print("Checking recli status...");
@@ -155,22 +159,35 @@ impl Cli {
         Ok(())
     }
 
-    fn handle_stop(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut session_manager = SessionManager::new();
+    fn handle_end(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let session_manager = SessionManager::new();
 
         if !session_manager.is_session_active() {
             println!("no active session");
             return Ok(());
         }
 
-        if let Some(log_dir) = session_manager.stop_session()? {
-            println!("session stopped successfully");
-            println!(
-                "all terminal commands and outputs saved to: {}",
-                log_dir.display()
-            );
+        // signal the running recli process to end gracefully
+        if let Some(pid) = session_manager.active_pid() {
+            #[cfg(unix)]
+            unsafe {
+                // send sigterm to allow graceful shutdown
+                let _ = libc::kill(pid as i32, libc::SIGTERM);
+            }
+
+            // wait briefly for the process to shut down and flush logs
+            let start = Instant::now();
+            let timeout = Duration::from_secs(5);
+            loop {
+                if !session_manager.process_exists_public(pid) { break; }
+                if start.elapsed() > timeout { break; }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+
+            println!("session end signal sent to pid {}", pid);
+            println!("if logs are not visible yet, they should appear momentarily");
         } else {
-            println!("no session was active");
+            println!("no active session pid found");
         }
 
         Ok(())
@@ -287,7 +304,7 @@ impl Cli {
                             command: entry.cmd.clone(),
                             exit_code: Some(entry.exit_code),
                             error_type: None,
-                            message: entry.output.clone(),
+                            message: entry.output_preview.clone(),
                             tags: vec![],
                             raw: None,
                         };

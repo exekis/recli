@@ -1,53 +1,39 @@
-use crate::command_detector::CommandDetector;
 use crate::error::{RecliError, Result};
 use crate::io::{InputHandler, OutputHandler};
-use crate::session::{SessionManager, LogEvent};
+use crate::session::{LogEvent, SessionManager};
 use crossterm::{
-    event::{self, Event},
+    event::{self, Event, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use portable_pty::{CommandBuilder, PtySize};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-/// PTY session with a shell
-pub struct PtySession {
+/// enhanced PTY session with logging
+pub struct LoggingPtySession {
     verbose: bool,
-    command_detector: Option<Arc<Mutex<CommandDetector>>>,
-    // capture currently typed input to delineate commands on enter
+    session_manager: Arc<Mutex<SessionManager>>,
     current_input: String,
-    // hold the session manager so we can emit log events and persist on exit
-    session_manager: Option<Arc<Mutex<SessionManager>>>,
+    terminated: Arc<AtomicBool>,
 }
 
-impl PtySession {
-    /// new PTY session
-    pub fn new(verbose: bool) -> Self {
+impl LoggingPtySession {
+    pub fn new(verbose: bool, session_manager: SessionManager) -> Self {
         Self {
             verbose,
-            command_detector: None,
+            session_manager: Arc::new(Mutex::new(session_manager)),
             current_input: String::new(),
-            session_manager: None,
+            terminated: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    /// new PTY session with command logging
-    pub fn new_with_logging(verbose: bool, session_manager: SessionManager) -> Self {
-        let session_manager = Arc::new(Mutex::new(session_manager));
-        let command_detector = Arc::new(Mutex::new(CommandDetector::new(session_manager.clone())));
-
-        Self {
-            verbose,
-            command_detector: Some(command_detector),
-            current_input: String::new(),
-            session_manager: Some(session_manager),
-        }
-    }
-
-    /// start and run the PTY session
     pub async fn run(&mut self, shell: &str) -> Result<()> {
-        self.verbose_print(&format!("Starting PTY session with shell: {}", shell));
+        self.verbose_print(&format!(
+            "Starting logging PTY session with shell: {}",
+            shell
+        ));
 
         // create PTY system and get terminal size
         let pty_system = portable_pty::native_pty_system();
@@ -85,25 +71,23 @@ impl PtySession {
             .map_err(|e| RecliError::Pty(e.into()))?;
 
         // spawn background task for PTY output
-        let command_detector = self.command_detector.clone();
+        let session_manager_clone = Arc::clone(&self.session_manager);
         let output_task = tokio::spawn(async move {
             let mut buffer = [0u8; 8192];
             loop {
                 match pty_reader.read(&mut buffer) {
                     Ok(0) => break, // EOF - shell exited
                     Ok(n) => {
-                        let mut processed = buffer[..n].to_vec();
-
-                        // if we have command detection, process through it
-                        if let Some(detector) = &command_detector {
-                            if let Ok(mut detector) = detector.lock() {
-                                processed = detector.process_output(&processed);
-                            }
-                        } else {
-                            processed = OutputHandler::process_output(&processed);
+                        let data = &buffer[..n];
+                        // log all output
+                        if let Ok(session_manager) = session_manager_clone.lock() {
+                            session_manager.send_log_event(LogEvent::Output {
+                                data: data.to_vec(),
+                            });
                         }
 
-                        if OutputHandler::forward_to_stdout(&processed).is_err() {
+                        // forward to stdout
+                        if OutputHandler::forward_to_stdout(data).is_err() {
                             break;
                         }
                     }
@@ -111,6 +95,19 @@ impl PtySession {
                 }
             }
         });
+
+        // listen for sigterm to end gracefully
+        #[cfg(unix)]
+        {
+            let term_flag = self.terminated.clone();
+            tokio::spawn(async move {
+                if let Ok(mut sig) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+                    let _ = sig.recv().await;
+                    term_flag.store(true, Ordering::Relaxed);
+                    eprintln!("[RECLI] received termination signal, ending session...");
+                }
+            });
+        }
 
         // input handling loop
         let result = self
@@ -121,12 +118,10 @@ impl PtySession {
         disable_raw_mode().map_err(|e| RecliError::Terminal(format!("{:?}", e.kind())))?;
         output_task.abort();
 
-        // persist logs by stopping the session when we own it
-        if let Some(sm) = &self.session_manager {
-            if let Ok(mut sm) = sm.lock() {
-                if let Ok(Some(log_dir)) = sm.stop_session() {
-                    println!("\rsession ended, logs saved to: {}", log_dir.display());
-                }
+        // stop session and save logs
+        if let Ok(mut session_manager) = self.session_manager.lock() {
+            if let Ok(Some(log_dir)) = session_manager.stop_session() {
+                println!("\rsession ended, logs saved to: {}", log_dir.display());
             }
         }
 
@@ -134,7 +129,6 @@ impl PtySession {
         result
     }
 
-    /// input handling loop
     async fn input_loop(
         &mut self,
         child: &mut Box<dyn portable_pty::Child + Send + Sync>,
@@ -142,6 +136,9 @@ impl PtySession {
         pty_pair: &portable_pty::PtyPair,
     ) -> Result<()> {
         loop {
+            if self.terminated.load(Ordering::Relaxed) {
+                break;
+            }
             // if shell process is still alive
             if let Ok(Some(exit_status)) = child.try_wait() {
                 self.verbose_print(&format!(
@@ -157,22 +154,14 @@ impl PtySession {
             {
                 match event::read().map_err(|e| RecliError::Terminal(format!("{:?}", e.kind())))? {
                     Event::Key(key_event) => {
-                        // check for ctrl+x termination hotkey
-                        if key_event.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
-                            if let crossterm::event::KeyCode::Char('x') = key_event.code {
-                                println!("\r\n[RECLI] Session terminated by user (Ctrl+X)");
-                                break;
-                            }
-                        }
-                        // capture text for current command and delimit on enter
-                        if let crossterm::event::KeyCode::Enter = key_event.code {
-                            self.log_command_if_ready();
-                            // reset input buffer after logging
-                            // this mirrors behavior in logging_pty
+                        // no hotkey-based termination anymore; use `recli end`
+
+                        // do not auto-log on enter; just track typed text for future features
+                        if let KeyCode::Enter = key_event.code {
                             self.current_input.clear();
-                        } else if let crossterm::event::KeyCode::Char(c) = key_event.code {
+                        } else if let KeyCode::Char(c) = key_event.code {
                             self.current_input.push(c);
-                        } else if let crossterm::event::KeyCode::Backspace = key_event.code {
+                        } else if let KeyCode::Backspace = key_event.code {
                             self.current_input.pop();
                         }
 
@@ -182,13 +171,14 @@ impl PtySession {
                         self.handle_resize(cols, rows, pty_pair)?;
                     }
                     Event::Mouse(_) => {
-                        // gIgnore mouse events for now
+                        // ignore mouse events for now
                     }
                     Event::FocusGained | Event::FocusLost => {
                         // ignore focus events
                     }
                     Event::Paste(text) => {
                         // handle paste events
+                        self.current_input.push_str(&text);
                         pty_writer.write_all(text.as_bytes())?;
                     }
                 }
@@ -197,7 +187,8 @@ impl PtySession {
         Ok(())
     }
 
-    /// handle a key event by converting it to PTY input
+    // removed artificial enter-based command logging
+
     fn handle_key_event(
         &self,
         key_event: crossterm::event::KeyEvent,
@@ -209,7 +200,6 @@ impl PtySession {
         Ok(())
     }
 
-    /// handle terminal resize events
     fn handle_resize(&self, cols: u16, rows: u16, pty_pair: &portable_pty::PtyPair) -> Result<()> {
         let new_size = PtySize {
             rows,
@@ -227,7 +217,6 @@ impl PtySession {
         Ok(())
     }
 
-    /// get current terminal size
     fn get_terminal_size(&self) -> Result<PtySize> {
         let (cols, rows) = crossterm::terminal::size()
             .map_err(|e| RecliError::Terminal(format!("{:?}", e.kind())))?;
@@ -240,30 +229,9 @@ impl PtySession {
         })
     }
 
-    /// print verbose message if verbose mode is enabled
     fn verbose_print(&self, message: &str) {
         if self.verbose {
             eprintln!("[RECLI] {}", message);
-        }
-    }
-    
-    /// log the accumulated input as a command on enter
-    fn log_command_if_ready(&self) {
-        let cmd = self.current_input.trim();
-        if cmd.is_empty() {
-            return;
-        }
-
-        let cwd = std::env::current_dir()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|_| "/unknown".to_string());
-
-        if let Some(sm) = &self.session_manager {
-            if let Ok(sm) = sm.lock() {
-                sm.send_log_event(LogEvent::CommandStart { cmd: cmd.to_string(), cwd: cwd.clone() });
-                // end immediately since we cannot reliably capture exit status here
-                sm.send_log_event(LogEvent::CommandEnd { exit_code: 0, cwd });
-            }
         }
     }
 }

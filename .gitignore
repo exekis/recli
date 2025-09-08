@@ -1,5 +1,6 @@
 # Rust build artifacts
 /target/
+.env
 
 *.exe
 *.dll
@@ -17,7 +18,7 @@ main
 recli
 
 *~
-*.bak
+.bak
 *.swp
 *.tmp
 

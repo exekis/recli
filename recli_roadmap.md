@@ -28,33 +28,42 @@
 * [x] Add JSON serialization for terminal logs
 * [x] Create start/stop commands with session state tracking
 
-### **Phase 3: Context Summarizer**
+### **Phase 3: Cloud Database Integration**
+
+* [x] Azure Cosmos DB integration with connection string parsing
+* [x] Automatic session upload on completion
+* [x] Environment-based configuration (.env support)
+* [x] Connection diagnostics (`cosmos_doctor` command)
+* [x] Robust error handling and retry logic
+* [x] Full context command capture and cloud storage
+
+### **Phase 4: Context Summarizer**
 
 * [ ] On hotkey, scan recent commands and extract:
   * [ ] All `error:` lines
   * [ ] All non-zero exit codes
 * [ ] Display interactive summary (e.g., with `ratatui`)
 
-### **Phase 4: Command Impact Tracker**
+### **Phase 5: Command Impact Tracker**
 
 * [ ] Detect canceling commands
 * [ ] Mark files added/removed (with snapshots or `inotify`)
 * [ ] Show final list of commands that changed system state
 
-### **Phase 5: Regex Assistant**
+### **Phase 6: Regex Assistant**
 
 * [ ] Add CLI to pass sample lines
 * [ ] Suggest regex statically
 * [ ] Test regex on scrollback buffer
 
-### **Phase 6: AI Integration**
+### **Phase 7: AI Integration**
 
 * [ ] Add optional LLM support (OpenAI, local)
 * [ ] Format prompt with context summary
 * [ ] Show AI-suggested fix
 * [ ] Optional: inject fix into shell stream
 
-### **Phase 7: `journalctl` Log Watcher**
+### **Phase 8: `journalctl` Log Watcher**
 
 * [ ] Spawn thread running `journalctl -f`
 * [ ] Parse key failures, tag timestamps

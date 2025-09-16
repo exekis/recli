@@ -69,16 +69,42 @@ impl CommandLogger {
         fs::create_dir_all(&primary_log_dir)?;
 
         let mut additional_log_dirs = Vec::new();
-        let system_log_dir = PathBuf::from("/recli")
-            .join("logs")
-            .join(&session_id);
+        // decide on a system-wide mirror path with fallback
+        // 1) try $RECLI_SYSTEM_LOG_DIR or default to /recli/logs
+        // 2) if that fails, try $RECLI_SYSTEM_LOG_FALLBACK or default to /tmp/recli/logs
+        // this bypasses permission issues by ensuring we always have a writable mirror
+        let sys_base = env::var("RECLI_SYSTEM_LOG_DIR").unwrap_or_else(|_| "/recli/logs".to_string());
+        let sys_dir_candidate = PathBuf::from(&sys_base).join(&session_id);
+        let fallback_base = env::var("RECLI_SYSTEM_LOG_FALLBACK").unwrap_or_else(|_| "/tmp/recli/logs".to_string());
+        let fallback_dir = PathBuf::from(&fallback_base).join(&session_id);
 
-        match fs::create_dir_all(&system_log_dir) {
-            Ok(_) => additional_log_dirs.push(system_log_dir),
-            Err(e) => eprintln!(
-                "warning: unable to prepare additional log directory under /recli/logs: {}",
-                e
-            ),
+        match fs::create_dir_all(&sys_dir_candidate) {
+            Ok(_) => {
+                additional_log_dirs.push(sys_dir_candidate);
+            }
+            Err(e_primary) => {
+                eprintln!(
+                    "warning: unable to use {}: {}",
+                    PathBuf::from(&sys_base).display(),
+                    e_primary
+                );
+                match fs::create_dir_all(&fallback_dir) {
+                    Ok(_) => {
+                        eprintln!(
+                            "info: mirroring logs to fallback {}",
+                            PathBuf::from(&fallback_base).display()
+                        );
+                        additional_log_dirs.push(fallback_dir);
+                    }
+                    Err(e_fallback) => {
+                        eprintln!(
+                            "warning: failed to prepare fallback mirror {}: {}",
+                            PathBuf::from(&fallback_base).display(),
+                            e_fallback
+                        );
+                    }
+                }
+            }
         }
         
         // initialize cosmos db client if credentials are available

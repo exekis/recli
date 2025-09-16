@@ -25,7 +25,7 @@ recli --help
 
 ## Cloud Storage Setup (Optional)
 
-Want your command sessions backed up to the cloud? Recli can automatically upload your session logs to Azure Cosmos DB. This is completely optional. Recli works perfectly fine storing everything locally.
+Want your command sessions backed up to the cloud? Recli can automatically upload your session logs to Azure Cosmos DB. This is completely optional. Recli works perfectly fine storing everything locally :)
 
 ### Setting up Azure Cosmos DB
 

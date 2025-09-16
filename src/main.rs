@@ -82,6 +82,13 @@ impl CommandLogger {
         })
     }
     
+    // debug output is enabled when env RECLI_DEBUG is set to 1 or true
+    fn debug_enabled() -> bool {
+        env::var("RECLI_DEBUG")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    }
+    
     fn init_cosmos_client() -> Option<CosmosClient> {
         // helper: clean and normalize endpoint
         fn normalize_endpoint(mut ep: String) -> String {
@@ -129,9 +136,11 @@ impl CommandLogger {
                 if let Some(account_name) = extract_account_name(&endpoint) {
                     // create the authorization token and client
                     if let Ok(auth) = AuthorizationToken::primary_key(&key) {
-                        eprintln!("debug: parsed endpoint: {}", endpoint);
-                        eprintln!("debug: extracted account: {}", account_name);
-                        eprintln!("debug: creating client with account name");
+                        if Self::debug_enabled() {
+                            eprintln!("debug: parsed endpoint: {}", endpoint);
+                            eprintln!("debug: extracted account: {}", account_name);
+                            eprintln!("debug: creating client with account name");
+                        }
                         return Some(CosmosClient::new(account_name, auth));
                     }
                 }
@@ -145,7 +154,9 @@ impl CommandLogger {
         ) {
             let account_name = account.trim().to_string();
             if let Ok(auth) = AuthorizationToken::primary_key(&key) {
-                eprintln!("debug: using cosmos account: {}", account_name);
+                if Self::debug_enabled() {
+                    eprintln!("debug: using cosmos account: {}", account_name);
+                }
                 return Some(CosmosClient::new(account_name, auth));
             }
         }
@@ -246,7 +257,9 @@ impl CommandLogger {
             return Err(e);
         }
 
-        eprintln!("✓ Session uploaded to Cosmos DB");
+        if Self::debug_enabled() {
+            eprintln!("session uploaded to cosmos db");
+        }
         Ok(())
     }
     
@@ -329,8 +342,8 @@ impl CommandLogger {
                 // print to terminal
                 print!("{}", stdout);
                 eprint!("{}", stderr);
-                io::stdout().flush().unwrap();
-                io::stderr().flush().unwrap();
+                let _ = io::stdout().flush();
+                let _ = io::stderr().flush();
                 
                 let entry = CommandEntry {
                     cmd: cmd.to_string(),
@@ -346,13 +359,13 @@ impl CommandLogger {
                 exit_code
             }
             Err(e) => {
-                eprintln!("Error: {}", e);
+                eprintln!("error: {}", e);
                 
                 let entry = CommandEntry {
                     cmd: cmd.to_string(),
                     exit_code: -1,
                     output: String::new(),
-                    stderr: format!("Error: {}", e),
+                    stderr: format!("error: {}", e),
                     cwd,
                     timestamp,
                     duration_ms,
@@ -373,7 +386,7 @@ impl CommandLogger {
         let json = serde_json::to_string_pretty(&log)?;
         fs::write(&log_file, json)?;
         
-        println!("\nSession saved to: {}", log_file.display());
+        println!("session saved to: {}", log_file.display());
         
         // try to upload once; never block the repl earlier
         if let Err(e) = self.upload_session_to_cosmos().await {
@@ -384,9 +397,9 @@ impl CommandLogger {
     }
     
     async fn interactive_shell(&mut self) -> io::Result<()> {
-        println!("Recording session to: {}", self.log_dir.display());
+        println!("recording session to: {}", self.log_dir.display());
         
-        println!("Type 'exit' to quit\n");
+        println!("type 'exit' to quit");
         
         loop {
             // Show prompt
@@ -442,21 +455,21 @@ async fn cosmos_doctor() -> io::Result<()> {
     let dbc = client.database_client(db.clone());
     let cc = dbc.collection_client(container.clone());
 
-    eprintln!("→ Checking database '{}'", db);
+    eprintln!("-> checking database '{}'", db);
     match dbc.get_database().into_future().await {
-        Ok(_) => eprintln!("  ✓ database exists"),
+        Ok(_) => eprintln!("  database exists"),
         Err(e) => {
             CommandLogger::log_cosmos_error("get_database failed", &e);
             return Ok(());
         }
     }
 
-    eprintln!("→ Checking container '{}'", container);
+    eprintln!("-> checking container '{}'", container);
     match cc.get_collection().into_future().await {
         Ok(_) => {
             // try to extract partition key info if available
-            eprintln!("  ✓ container exists");
-            eprintln!("  Note: Verify container has partition key '/session_id'");
+            eprintln!("  container exists");
+            eprintln!("  note: verify container has partition key '/session_id'");
         }
         Err(e) => {
             CommandLogger::log_cosmos_error("get_container failed", &e);
@@ -474,9 +487,9 @@ async fn cosmos_doctor() -> io::Result<()> {
         kind: "doctor_ping",
         ts: chrono::Utc::now().to_rfc3339(),
     };
-    eprintln!("→ Upserting ping doc…");
+    eprintln!("-> upserting ping doc");
     match cc.create_document(ping).is_upsert(true).into_future().await {
-        Ok(_) => eprintln!("  ✓ ping upsert ok"),
+        Ok(_) => eprintln!("  ping upsert ok"),
         Err(e) => {
             CommandLogger::log_cosmos_error("ping upsert failed", &e);
         }
@@ -497,10 +510,10 @@ async fn main() -> io::Result<()> {
                 logger.interactive_shell().await?;
             }
             "end" => {
-                println!("Session already ended (this version doesn't need 'end')");
+                println!("session already ended (this version doesn't need 'end')");
             }
             "status" => {
-                println!("No active session (this version doesn't track sessions)");
+                println!("no active session (this version doesn't track sessions)");
             }
             "cosmos_doctor" => {
                 cosmos_doctor().await?;

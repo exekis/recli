@@ -44,7 +44,7 @@ impl PtySession {
 
     /// start and run the PTY session
     pub async fn run(&mut self, shell: &str) -> Result<()> {
-        self.verbose_print(&format!("Starting PTY session with shell: {}", shell));
+    self.verbose_print(&format!("starting pty session with shell: {}", shell));
 
         // create PTY system and get terminal size
         let pty_system = portable_pty::native_pty_system();
@@ -106,7 +106,7 @@ impl PtySession {
             .map_err(|e| RecliError::Pty(e.into()))?;
 
         self.verbose_print(&format!(
-            "PTY session started with PID: {:?}",
+            "pty session started with pid: {:?}",
             child.process_id()
         ));
 
@@ -154,9 +154,9 @@ impl PtySession {
             loop {
                 match pty_reader.read(&mut buffer) {
                     Ok(0) => {
-                        // eof - shell exited
+                        // eof shell exited
                         if verbose_flag {
-                            eprintln!("[PTY] EOF detected, shell exited");
+                            eprintln!("[pty] eof detected, shell exited");
                         }
                         // flush any active command so it gets recorded
                         if let Some(det) = &detector_for_output {
@@ -169,7 +169,7 @@ impl PtySession {
                     Ok(n) => {
                         // feed through detector to emit structured events while preserving original output
                         if verbose_flag {
-                            eprintln!("[PTY] Read {} bytes from PTY", n);
+                            eprintln!("[pty] read {} bytes from pty", n);
                         }
                         let processed = if let Some(det) = &detector_for_output {
                             if let Ok(mut det) = det.lock() {
@@ -186,7 +186,7 @@ impl PtySession {
                     }
                     Err(e) => {
                         if verbose_flag {
-                            eprintln!("[PTY] Error reading from PTY: {}", e);
+                            eprintln!("[pty] error reading from pty: {}", e);
                         }
                         break;
                     }
@@ -202,7 +202,7 @@ impl PtySession {
                 if let Ok(mut sig) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
                     let _ = sig.recv().await;
                     term_flag.store(true, Ordering::Relaxed);
-                    eprintln!("[RECLI] received termination signal, ending session...");
+                    eprintln!("[recli] received termination signal, ending session");
                 }
             });
         }
@@ -231,7 +231,7 @@ impl PtySession {
                 }
             }
 
-        self.verbose_print("PTY session ended");
+    self.verbose_print("pty session ended");
         result
     }
 
@@ -242,14 +242,14 @@ impl PtySession {
         pty_pair: &portable_pty::PtyPair,
     ) -> Result<()> {
         loop {
-            // honor termination flag set by sigterm handler
+            // honour termination flag set by sigterm handler
             if self.terminated.load(Ordering::Relaxed) {
                 break;
             }
             // if shell process is still alive
             if let Ok(Some(exit_status)) = child.try_wait() {
                 self.verbose_print(&format!(
-                    "Shell process exited with status: {:?}",
+                    "shell process exited with status: {:?}",
                     exit_status
                 ));
                 break;
@@ -295,7 +295,7 @@ impl PtySession {
             .resize(new_size)
             .map_err(|e| RecliError::Pty(e.into()))?;
 
-        self.verbose_print(&format!("Terminal resized to {}x{}", cols, rows));
+    self.verbose_print(&format!("terminal resized to {}x{}", cols, rows));
         Ok(())
     }
 
@@ -315,7 +315,7 @@ impl PtySession {
     /// print verbose message if verbose mode is enabled
     fn verbose_print(&self, message: &str) {
         if self.verbose {
-            eprintln!("[RECLI] {}", message);
+            eprintln!("[recli] {}", message);
         }
     }
 

@@ -2,7 +2,7 @@ use crate::session::{LogEvent, SessionManager};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-// streaming scanner that preserves bytes and strips recli markers without corrupting utf-8
+// streaming scanner that preserves bytes and strips recli markers without corrupting utf8
 #[derive(Debug)]
 pub struct CommandDetector {
     // holds tail bytes if a marker starts near the end of a chunk

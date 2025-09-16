@@ -41,7 +41,8 @@ struct SessionDoc {
 
 struct CommandLogger {
     session_id: String,
-    log_dir: PathBuf,
+    primary_log_dir: PathBuf,
+    additional_log_dirs: Vec<PathBuf>,
     entries: Vec<CommandEntry>,
     cosmos_client: Option<CosmosClient>,
     cosmos_database: Option<String>,
@@ -60,12 +61,25 @@ impl CommandLogger {
         
         let session_id = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
         let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        let log_dir = PathBuf::from(home)
+        let primary_log_dir = PathBuf::from(home)
             .join(".recli")
             .join("logs")
             .join(&session_id);
-        
-        fs::create_dir_all(&log_dir)?;
+
+        fs::create_dir_all(&primary_log_dir)?;
+
+        let mut additional_log_dirs = Vec::new();
+        let system_log_dir = PathBuf::from("/recli")
+            .join("logs")
+            .join(&session_id);
+
+        match fs::create_dir_all(&system_log_dir) {
+            Ok(_) => additional_log_dirs.push(system_log_dir),
+            Err(e) => eprintln!(
+                "warning: unable to prepare additional log directory under /recli/logs: {}",
+                e
+            ),
+        }
         
         // initialize cosmos db client if credentials are available
         let cosmos_client = Self::init_cosmos_client();
@@ -74,7 +88,8 @@ impl CommandLogger {
         
         Ok(CommandLogger {
             session_id,
-            log_dir,
+            primary_log_dir,
+            additional_log_dirs,
             entries: Vec::new(),
             cosmos_client,
             cosmos_database,
@@ -378,16 +393,29 @@ impl CommandLogger {
     }
     
     async fn save_async(&self) -> io::Result<()> {
-        let log_file = self.log_dir.join("commands.json");
+        let log_file = self.primary_log_dir.join("commands.json");
         let log = CommandLog {
             entries: self.entries.clone(),
         };
-        
+
         let json = serde_json::to_string_pretty(&log)?;
-        fs::write(&log_file, json)?;
-        
+        fs::write(&log_file, json.as_bytes())?;
+
         println!("session saved to: {}", log_file.display());
-        
+
+        for dir in &self.additional_log_dirs {
+            let mirror = dir.join("commands.json");
+            if let Err(e) = fs::write(&mirror, json.as_bytes()) {
+                eprintln!(
+                    "warning: failed to write mirrored log to {}: {}",
+                    mirror.display(),
+                    e
+                );
+            } else {
+                println!("session also saved to: {}", mirror.display());
+            }
+        }
+
         // try to upload once; never block the repl earlier
         if let Err(e) = self.upload_session_to_cosmos().await {
             Self::log_cosmos_error("Cosmos upload failed", &e);
@@ -397,8 +425,13 @@ impl CommandLogger {
     }
     
     async fn interactive_shell(&mut self) -> io::Result<()> {
-        println!("recording session to: {}", self.log_dir.display());
-        
+        println!("recording session to: {}", self.primary_log_dir.display());
+        if !self.additional_log_dirs.is_empty() {
+            for dir in &self.additional_log_dirs {
+                println!("mirroring session logs to: {}", dir.display());
+            }
+        }
+
         println!("type 'exit' to quit");
         
         loop {

@@ -81,6 +81,7 @@ When you exit a recli session, you'll see "✓ Session uploaded to Cosmos DB" an
 
 > **Note:** For the latest development progress and implementation status, see [`recli_roadmap.md`](recli_roadmap.md).
 <!-- 
+
 ### Infrastructure
 
 * CLI interface via `clap` with subcommands (`start`, `stop`, `status`, `recent`, `clear`)

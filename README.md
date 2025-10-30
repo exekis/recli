@@ -1,14 +1,35 @@
 # Recli
 
-**Recli** is a fully open-source, **Rust-based CLI tool** that works inside any terminal emulator (Kitty, Alacritty, tmux, etc.), without needing to replace the terminal itself (like Warp or Wave). It will enhance the terminal experience through:
+**Recli** is a fully open-source, **Rust-based CLI tool** that works inside any terminal emulator (Kitty, Alacritty, tmux, etc.), without needing to replace the terminal itself (like Warp or Wave). It will capture all commands in the active session (including their runtime, exit code, output, etc.), and it will add the following to the terminal experience:
 
-* **Hotkey-activated full context capture**
-* **Parsing features** like error summarization and regex parsing
-* **AI features** like command flow summarization and suggestions
-* **Session impact tracking** to extract what "actually worked" from a messy debug session
-* **Passive `journalctl` monitoring** for low-level error capture
+* Hotkey-activated full context capture
+* Parsing features (error summarization and regex parsing)
+* Session impact tracking to extract what actually worked from a messy debug session
+* `journalctl` monitoring for low-level error capture
 
 This is a **lightweight**, **user-controlled**, **emulator-agnostic** tool that's both powerful for advanced users and helpful for those learning CLI workflows.
+
+
+### How it works in practice
+
+```bash
+# start a recli session
+$ recli 
+[recli] Starting shell session...
+
+# do your normal work
+$ echo "hello world"
+hello world
+$ ls -la
+total 48
+drwxr-xr-x  6 user user  4096 Sep  8 16:24 .
+# ... more commands
+
+# when you're done, just exit
+$ exit
+Session saved to: /home/user/.recli/logs/20250908_162446/commands.json
+✓ Session uploaded to Cosmos DB
+```
 
 ---
 
@@ -25,7 +46,7 @@ recli --help
 
 ## Cloud Storage Setup (Optional)
 
-Want your command sessions backed up to the cloud? Recli can automatically upload your session logs to Azure Cosmos DB. This is completely optional. Recli works perfectly fine storing everything locally :)
+If you want your command sessions backed up to the cloud, Recli can automatically upload your session logs to Azure Cosmos DB. This is completely optional. Recli works perfectly fine storing everything locally :)
 
 ### Setting up Azure Cosmos DB
 
@@ -50,30 +71,8 @@ Just replace `your-account` and `your-key-here` with your actual values from Azu
 
 Run `recli cosmos_doctor` to verify everything's working. You should see green checkmarks if it's all set up correctly.
 
-### How it works in practice
 
-Here's what a typical session looks like:
-
-```bash
-# start a recli session
-$ recli 
-[recli] Starting shell session...
-
-# do your normal work
-$ echo "hello world"
-hello world
-$ ls -la
-total 48
-drwxr-xr-x  6 user user  4096 Sep  8 16:24 .
-# ... more commands
-
-# when you're done, just exit
-$ exit
-Session saved to: /home/user/.recli/logs/20250908_162446/commands.json
-✓ Session uploaded to Cosmos DB
-```
-
-That's it! Your session gets saved locally (as always) and automatically synced to the cloud. No extra steps and no manual uploads. You can browse your uploaded sessions in the Azure portal or query them programmatically later.
+Your session gets saved locally (as always) and automatically synced to the cloud. You can browse your uploaded sessions in the Azure portal or query them programmatically later.
 
 When you exit a recli session, you'll see "✓ Session uploaded to Cosmos DB" and your command history will be safely stored in the cloud.
 
